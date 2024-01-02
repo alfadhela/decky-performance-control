@@ -1,105 +1,90 @@
 import {
-  ButtonItem,
-  definePlugin,
-  DialogButton,
-  Menu,
-  MenuItem,
+  Field,
   PanelSection,
   PanelSectionRow,
-  Router,
   ServerAPI,
-  showContextMenu,
+  SliderField,
+  ToggleField,
+  definePlugin,
   staticClasses,
 } from "decky-frontend-lib";
-import { VFC } from "react";
-import { FaShip } from "react-icons/fa";
+import { useEffect, useState, VFC } from "react";
+import { FaTachometerAlt } from "react-icons/fa";
 
-import logo from "../assets/logo.png";
+import { Device, Settings, TDPInformation } from "./types";
+import * as backend from "./backend";
 
-// interface AddMethodArgs {
-//   left: number;
-//   right: number;
-// }
+const Content: VFC<{ serverAPI: ServerAPI }> = () => {
+  const [settings, setSettings] = useState<Settings>({app_id: 0,boost: false, tdp: false, tdp_limit: 10, egpu: false, debug: true})
+  const [device, setDevice] = useState<Device>({name: "test", vendor: "", tdp:false, min_tdp: 5, max_tdp: 30, rgb: false, boost: false});
+  const [tdpInfo, setTDPInfo] = useState<TDPInformation>({tdp_limit:10});
 
-const Content: VFC<{ serverAPI: ServerAPI }> = ({serverAPI}) => {
-  // const [result, setResult] = useState<number | undefined>();
+  useEffect(() => {
+    backend.getDevice()
+      .then((device) => { setDevice(device) });
+  }, []);
 
-  // const onClick = async () => {
-  //   const result = await serverAPI.callPluginMethod<AddMethodArgs, number>(
-  //     "add",
-  //     {
-  //       left: 2,
-  //       right: 2,
-  //     }
-  //   );
-  //   if (result.success) {
-  //     setResult(result.result);
-  //   }
-  // };
+  useEffect(() => {
+    backend.getSettings(0)
+      .then((settings) => { setSettings(settings) });
+  }, [])
+
+  useEffect(() => {
+    backend.getTDPInformation()
+      .then((tdpInfo) => { setTDPInfo(tdpInfo) })
+  },[]);
 
   return (
-    <PanelSection title="Panel Section">
+    <PanelSection title="CPU">
+      <Field
+        label={device.vendor + " " + device.name +" ("+tdpInfo.tdp_limit+") Watts"}
+      />
       <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={(e) =>
-            showContextMenu(
-              <Menu label="Menu" cancelText="CAAAANCEL" onCancel={() => {}}>
-                <MenuItem onSelected={() => {}}>Item #1</MenuItem>
-                <MenuItem onSelected={() => {}}>Item #2</MenuItem>
-                <MenuItem onSelected={() => {}}>Item #3</MenuItem>
-              </Menu>,
-              e.currentTarget ?? window
-            )
-          }
-        >
-          Server says yolo
-        </ButtonItem>
-      </PanelSectionRow>
-
-      <PanelSectionRow>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <img src={logo} />
-        </div>
-      </PanelSectionRow>
-
-      <PanelSectionRow>
-        <ButtonItem
-          layout="below"
-          onClick={() => {
-            Router.CloseSideMenus();
-            Router.Navigate("/decky-plugin-test");
+        <ToggleField 
+          label="Boost" 
+          description="Increase maximum CPU frequency"
+          disabled={!device.boost}
+          onChange={(value) => {
+            settings.boost = value;
+            backend.setSettings(settings);
           }}
-        >
-          Router
-        </ButtonItem>
+          checked={settings.boost}/>
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ToggleField 
+          label="TDP Limit" 
+          description="Limit CPU for less total power"
+          disabled={!device.tdp}
+          onChange={(value) => {
+            let newSettings = {app_id: settings.app_id, boost: settings.boost, tdp: value, tdp_limit: settings.tdp_limit, egpu: settings.egpu, debug:settings.debug};
+            setSettings(newSettings);
+            backend.setSettings(newSettings);
+          }}
+          checked={settings.tdp}/>
+          {settings.tdp && <SliderField
+            label="Watts"
+            showValue={true}
+            max={device.max_tdp}
+            min={device.min_tdp}
+            step={1}
+            value={tdpInfo.tdp_limit}
+            onChange={(value) => {
+              let newSettings = {app_id: settings.app_id, boost: settings.boost, tdp: settings.tdp, tdp_limit: value, egpu: settings.egpu, debug:settings.debug};
+              setSettings(newSettings);
+              setTDPInfo({tdp_limit: value});
+              backend.setSettings(newSettings);
+            }}
+            />
+          }
       </PanelSectionRow>
     </PanelSection>
   );
 };
 
-const DeckyPluginRouterTest: VFC = () => {
-  return (
-    <div style={{ marginTop: "50px", color: "white" }}>
-      Hello World!
-      <DialogButton onClick={() => Router.NavigateToLibraryTab()}>
-        Go to Library
-      </DialogButton>
-    </div>
-  );
-};
-
 export default definePlugin((serverApi: ServerAPI) => {
-  serverApi.routerHook.addRoute("/decky-plugin-test", DeckyPluginRouterTest, {
-    exact: true,
-  });
-
   return {
-    title: <div className={staticClasses.Title}>Example Plugin</div>,
+    title: <div className={staticClasses.Title}>Performance</div>,
     content: <Content serverAPI={serverApi} />,
-    icon: <FaShip />,
-    onDismount() {
-      serverApi.routerHook.removeRoute("/decky-plugin-test");
-    },
+    icon: <FaTachometerAlt />,
   };
 });
